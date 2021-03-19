@@ -8,7 +8,7 @@ edition = "2018"
 audio = { path = "../audio" }
 dsp = { path = "../dsp" }
 crossbeam = "0.8.0"
-
+granular = { path="../granular" }
 anyhow = "1.0"
 
 [[bin]]

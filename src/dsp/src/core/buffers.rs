@@ -11,6 +11,12 @@ impl Buffer {
         Buffer::default()
     }
 
+    pub fn with_value(value: f32) -> Buffer {
+        Buffer {
+            buf: [value; N_SAMPLES_PER_CHUNK],
+        }
+    }
+
     pub fn set_zero(&mut self) {
         *self = Default::default();
     }

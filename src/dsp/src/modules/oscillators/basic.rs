@@ -24,7 +24,7 @@ impl<W: Wave> BaseOscillator<W> {
             frequency: 220.0,
             step: 0.0,
             phase: 0.0,
-            level: 0.25,
+            level: 1.0,
             wave: wave,
             output: SharedBuffer::default(),
         };
@@ -55,10 +55,9 @@ impl<'a, W: Wave> Module for BaseOscillator<W> {
     fn process(&mut self) {
         let mut output = self.output.try_borrow_mut().unwrap();
 
-        for l in output.get_mut() {
+        for l in output.get_mut().iter_mut() {
             let value = self.level * self.wave.get_at(self.phase);
-            self.phase += self.step;
-            self.phase = self.normalize_phase(self.phase);
+            self.phase = self.normalize_phase(self.phase + self.step);
             *l = value;
         }
     }

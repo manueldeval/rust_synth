@@ -25,8 +25,11 @@ pub trait MonoGenerator: Module {
     fn get_output(&self) -> SharedBuffer;
 }
 
-impl MonoGenerator for dyn StereoGenerator {
-    fn get_output(&self) -> SharedBuffer {
-        return self.get_left_output();
+impl StereoGenerator for dyn MonoGenerator {
+    fn get_left_output(&self) -> SharedBuffer {
+        return self.get_output();
+    }
+    fn get_right_output(&self) -> SharedBuffer {
+        return self.get_output();
     }
 }

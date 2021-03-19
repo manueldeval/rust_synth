@@ -4,21 +4,21 @@ extern crate anyhow;
 
 extern crate audio;
 
-use dsp::modules::{oscillators::BaseOscillator, wave::SineWave};
-use audio::{player::{Player}, synthengine::{StereoGeneratorFactory}};
-
-
+use audio::{player::Player, synthengine::StereoGeneratorFactory};
+use granular::Granular;
 
 #[derive(Clone)]
 struct SoundGeneratorFactory;
 impl StereoGeneratorFactory for SoundGeneratorFactory {
-    type Gen = BaseOscillator<SineWave>;
+    type Gen = Granular;
     fn create(&self) -> Self::Gen {
-        BaseOscillator::new(SineWave {})
+        Granular::new()
     }
 }
 impl SoundGeneratorFactory {
-    pub fn new() -> Self { SoundGeneratorFactory {}}
+    pub fn new() -> Self {
+        SoundGeneratorFactory {}
+    }
 }
 
 fn main() -> anyhow::Result<()> {
@@ -28,7 +28,6 @@ fn main() -> anyhow::Result<()> {
     player.stop();
     Ok(())
 }
-
 
 fn pause() {
     let mut stdin = io::stdin();

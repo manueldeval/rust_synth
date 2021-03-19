@@ -5,7 +5,7 @@ authors = ["Manuel Deval <manuel.deval@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-audio = { path = "../audio" }
+dsp = { path = "../dsp" }
 
 [lib]
 path="src/lib.rs"
