@@ -1,0 +1,17 @@
+[package]
+name = "wiewer"
+version = "0.0.1"
+authors = ["Manuel Deval <manuel.deval@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+audio = { path = "../audio" }
+dsp = { path = "../dsp" }
+anyhow = "1.0"
+nannou = "0.15.0"
+crossbeam = "0.8.0"
+
+[[bin]]
+name="viewer"
+path="src/main.rs"
+

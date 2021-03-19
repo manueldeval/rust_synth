@@ -1,0 +1,17 @@
+[package]
+name = "audio"
+version = "0.0.1"
+authors = ["Manuel Deval <manuel.deval@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+cpal = "0.13.1"
+anyhow = "1.0"
+clap = "2.33.3"
+crossbeam = "0.8.0"
+itertools = "0.10.0"
+dsp = { path = "../dsp" }
+
+[lib]
+path="src/lib.rs"
+

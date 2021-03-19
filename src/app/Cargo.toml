@@ -1,0 +1,16 @@
+[package]
+name = "demoapp"
+version = "0.0.1"
+authors = ["Manuel Deval <manuel.deval@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+audio = { path = "../audio" }
+dsp = { path = "../dsp" }
+crossbeam = "0.8.0"
+
+anyhow = "1.0"
+
+[[bin]]
+name="demoapp"
+path="src/main.rs"

@@ -1,0 +1,8 @@
+[workspace]
+members = [
+  "src/granular",
+  "src/audio",
+  "src/app",
+  "src/dsp",
+  "src/viewer"
+]

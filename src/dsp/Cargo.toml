@@ -1,0 +1,13 @@
+[package]
+name = "dsp"
+version = "0.0.1"
+authors = ["Manuel Deval <manuel.deval@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+lazy_static = "1.4.0"
+rand = "0.8.3"
+itertools = "0.10.0"
+
+[lib]
+path="src/lib.rs"
