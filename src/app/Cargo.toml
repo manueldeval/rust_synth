@@ -5,6 +5,7 @@ authors = ["Manuel Deval <manuel.deval@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+termion = "1.5.5"
 audio = { path = "../audio" }
 dsp = { path = "../dsp" }
 crossbeam = "0.8.0"

@@ -6,6 +6,9 @@ edition = "2018"
 
 [dependencies]
 dsp = { path = "../dsp" }
+crossbeam = "0.8.0"
+strum = "0.20"
+strum_macros = "0.20"
 
 [lib]
 path="src/lib.rs"

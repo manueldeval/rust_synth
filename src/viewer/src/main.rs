@@ -5,25 +5,34 @@ use std::{
 
 use audio::{player::Player, synthengine::StereoGeneratorFactory};
 use crossbeam::channel::unbounded;
-use granular::Granular;
+use granular::{Granular, event::create_event_sender_receiver};
+use granular::event::{EventSender,EventReceiver};
 use nannou::ui::prelude::*;
 use nannou::{prelude::*, ui::widget::Id, Ui};
 
 #[derive(Clone)]
-struct SoundGeneratorFactory;
+struct SoundGeneratorFactory {
+    event_sender: EventSender,
+    event_receiver: EventReceiver,
+}
+impl SoundGeneratorFactory {
+    pub fn new() -> Self {
+        let (s,r) = create_event_sender_receiver();
+        SoundGeneratorFactory {
+            event_sender: s,
+            event_receiver: r,
+        }
+    }
+}
 impl StereoGeneratorFactory for SoundGeneratorFactory {
     type Gen = Granular;
     fn create(&self) -> Self::Gen {
-        let mut osc = Granular::new();
+        let mut osc = Granular::new(self.event_receiver.clone());
         osc.set_frequency(220.0);
         osc
     }
 }
-impl SoundGeneratorFactory {
-    pub fn new() -> Self {
-        SoundGeneratorFactory {}
-    }
-}
+
 
 fn main() -> anyhow::Result<()> {
     nannou::app(model).update(update).simple_window(view).run();

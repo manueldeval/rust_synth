@@ -1,5 +1,6 @@
-use std::{cell::RefCell, rc::Rc};
-
+use std::{borrow::BorrowMut, cell::RefCell, rc::Rc};
+pub mod event;
+use event::*;
 use dsp::{
     core::{Buffer, Module, SharedBuffer, StereoGenerator},
     modules::{
@@ -17,10 +18,11 @@ pub struct Granular {
 
     output: Rc<RefCell<dyn StereoGenerator>>,
     all: Vec<Rc<RefCell<dyn Module>>>,
+    event_receiver: EventReceiver,
 }
 
 impl Granular {
-    pub fn new() -> Self {
+    pub fn new(recv: EventReceiver) -> Self {
         let mut main_osc = BaseOscillator::new(SineWave {});
         main_osc.set_level(0.5);
 
@@ -53,16 +55,35 @@ impl Granular {
             am_adder,
             am_multiply,
             all,
+            event_receiver: recv
         }
     }
 
     pub fn set_frequency(&mut self, freq: f32) {
         self.main_osc.try_borrow_mut().unwrap().set_frequency(freq);
     }
+
+    pub fn handle_event(&self){
+        match self.event_receiver.receive() {
+            Some(Event::NoteOn(channel,midi_note, velocity)) => {
+                let mut osc = self.main_osc.try_borrow_mut().unwrap();
+                (*osc).set_frequency(440.0 * (2.0f32).powf( (midi_note as f32- 69.0)/12.0));
+                (*osc).set_level( (velocity as f32)/127.0 );
+            }
+            Some(Event::NoteOff(channel,midi_note)) => {
+                let mut osc = self.main_osc.try_borrow_mut().unwrap();
+                (*osc).set_frequency(440.0 * (2.0f32).powf( (midi_note as f32- 69.0)/12.0));
+                (*osc).set_level(0.0);
+            }
+            _ => {},
+        };
+    }
 }
 
 impl Module for Granular {
     fn process(&mut self) {
+        self.handle_event();
+
         self.all
             .iter()
             .for_each(|m| m.try_borrow_mut().unwrap().process());

@@ -1,42 +1,85 @@
-use std::{io, io::prelude::*};
+use std::io::{stdin, stdout, Write};
+extern crate termion;
 
+use termion::{event::Key, input::TermRead};
+use termion::raw::IntoRawMode;
 extern crate anyhow;
 
 extern crate audio;
 
 use audio::{player::Player, synthengine::StereoGeneratorFactory};
-use granular::Granular;
+use granular::{Granular, event::{Event, EventReceiver, EventSender, create_event_sender_receiver}};
 
-#[derive(Clone)]
-struct SoundGeneratorFactory;
+struct SoundGeneratorFactory {
+    pub event_sender: EventSender,
+    pub event_receiver: EventReceiver,
+}
+impl Clone for SoundGeneratorFactory {
+    fn clone(&self) -> Self {
+        SoundGeneratorFactory {
+            event_sender: self.event_sender.clone(),
+            event_receiver: self.event_receiver.clone()
+        }
+    }
+}
+
+impl SoundGeneratorFactory {
+    pub fn new() -> Self {
+        let (event_sender,event_receiver) = create_event_sender_receiver();
+        SoundGeneratorFactory {
+            event_sender,
+            event_receiver
+        }
+    }
+}
 impl StereoGeneratorFactory for SoundGeneratorFactory {
     type Gen = Granular;
     fn create(&self) -> Self::Gen {
-        Granular::new()
-    }
-}
-impl SoundGeneratorFactory {
-    pub fn new() -> Self {
-        SoundGeneratorFactory {}
+        let mut osc = Granular::new(self.event_receiver.clone());
+        osc.set_frequency(220.0);
+        osc
     }
 }
 
 fn main() -> anyhow::Result<()> {
-    let mut player = Player::new(SoundGeneratorFactory::new(), None);
+    let synth_factory = SoundGeneratorFactory::new();
+    let event_sender = synth_factory.event_sender.clone();
+    let mut player = Player::new(synth_factory, None);
     player.start()?;
-    pause();
+    event_loop(event_sender);
     player.stop();
     Ok(())
 }
 
-fn pause() {
-    let mut stdin = io::stdin();
-    let mut stdout = io::stdout();
+fn event_loop(sender: EventSender) {
+    let stdin = stdin();
+    let mut stdout = stdout().into_raw_mode().unwrap();
 
-    // We want the cursor to stay at the end of the line, so we print without a newline and flush manually.
-    write!(stdout, "Press any key to continue...").unwrap();
-    stdout.flush().unwrap();
+    for c in stdin.keys() {
+        write!(
+            stdout,
+            "{}{}",
+            termion::cursor::Goto(1, 1),
+            termion::clear::All
+        )
+        .unwrap();
+        match c.unwrap() {
+            Key::Char('a') => sender.send(Event::NoteOn(1,57,127)),
+            Key::Char('z') => sender.send(Event::NoteOn(1,58,127)),
+            Key::Char('e') => sender.send(Event::NoteOn(1,59,127)),
+           
+            Key::Ctrl('a') => sender.send(Event::NoteOff(1,57)),
+            Key::Ctrl('z') => sender.send(Event::NoteOff(1,58)),
+            Key::Ctrl('e') => sender.send(Event::NoteOff(1,59)),
 
-    // Read a single byte and discard
-    let _ = stdin.read(&mut [0u8]).unwrap();
+            Key::Char('q') | Key::Ctrl('c') => {
+                println!("Quit");
+                break
+            },
+            Key::Char(c) => {println!("{}",c);},
+            _ => {},
+        }
+        stdout.flush().unwrap();
+    }
+
 }
