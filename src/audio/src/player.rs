@@ -30,10 +30,11 @@ where
         }
     }
 
-    pub fn start(&mut self) -> Result<(), anyhow::Error> {
-        self.synth_engine.start();
-        self.audio_engine.start()?;
-        Ok(())
+    pub fn start(&mut self) -> Result<f32, anyhow::Error> {
+        let sample_rate = self.audio_engine.start()?;
+        self.synth_engine.start(sample_rate);
+
+        Ok(sample_rate)
     }
     pub fn stop(&mut self) {
         self.synth_engine.stop();

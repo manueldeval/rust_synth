@@ -9,6 +9,9 @@ dsp = { path = "../dsp" }
 crossbeam = "0.8.0"
 strum = "0.20"
 strum_macros = "0.20"
+thiserror= "1.0.24"
+hound = "3.4.0"
+rosc = "0.5.1"
 
 [lib]
 path="src/lib.rs"

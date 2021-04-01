@@ -5,11 +5,14 @@ use std::{
 
 use audio::{player::Player, synthengine::StereoGeneratorFactory};
 use crossbeam::channel::unbounded;
-use granular::{Granular, event::create_event_sender_receiver};
-use granular::event::{EventSender,EventReceiver};
+use dsp::core::OscReceiver;
+use granular::{create_event_sender_receiver, EventReceiver, EventSender, GranularSynth};
+use granular::{GranularController, GranularOscMessageHandler};
 use nannou::ui::prelude::*;
 use nannou::{prelude::*, ui::widget::Id, Ui};
 
+//===================================
+// Synth factory
 #[derive(Clone)]
 struct SoundGeneratorFactory {
     event_sender: EventSender,
@@ -17,22 +20,21 @@ struct SoundGeneratorFactory {
 }
 impl SoundGeneratorFactory {
     pub fn new() -> Self {
-        let (s,r) = create_event_sender_receiver();
+        let (s, r) = create_event_sender_receiver();
         SoundGeneratorFactory {
             event_sender: s,
             event_receiver: r,
         }
     }
 }
+
 impl StereoGeneratorFactory for SoundGeneratorFactory {
-    type Gen = Granular;
+    type Gen = GranularSynth;
     fn create(&self) -> Self::Gen {
-        let mut osc = Granular::new(self.event_receiver.clone());
-        osc.set_frequency(220.0);
+        let osc = GranularSynth::new(self.event_receiver.clone());
         osc
     }
 }
-
 
 fn main() -> anyhow::Result<()> {
     nannou::app(model).update(update).simple_window(view).run();
@@ -41,6 +43,8 @@ fn main() -> anyhow::Result<()> {
 
 struct Model {
     _player: Player<SoundGeneratorFactory>,
+    _synth_controller: Arc<Mutex<GranularController>>,
+    _osc_receiver: OscReceiver<GranularOscMessageHandler>,
     data: Arc<Mutex<Vec<f32>>>,
     ui: Ui,
     slider_id: Id,
@@ -48,19 +52,32 @@ struct Model {
 }
 
 fn model(app: &App) -> Model {
+    // Sound
     let (sender, receiver) = unbounded();
-    let mut player = Player::new(SoundGeneratorFactory::new(), Some(sender));
-    let _ = player.start();
+    let sound_generator_factory = SoundGeneratorFactory::new();
+    let control_channel = sound_generator_factory.event_sender.clone();
+    let mut player = Player::new(sound_generator_factory, Some(sender));
+    let sample_rate = player.start().unwrap();
+
+    let mut synth_controller = GranularController::new(control_channel, sample_rate);
+    let _ = synth_controller
+        .load_samples("/home/deman/projets/perso/rust/granular/mission24000.wav".to_owned());
+
+    let wrapped_synth_controller = Arc::new(Mutex::new(synth_controller));
+    let mut osc_receiver = OscReceiver::new(
+        "127.0.0.1:9666".to_owned(),
+        GranularOscMessageHandler::new(wrapped_synth_controller.clone()),
+    );
+    osc_receiver.start().unwrap();
+
+    //
     let slider_value = Arc::new(Mutex::new(100.0_f32));
     let data = Arc::new(Mutex::new(vec![0.0_f32, 0.0_f32]));
     let other_data = data.clone();
 
     let thread_slider_value = slider_value.clone();
     thread::spawn(move || loop {
-        let size =
-        {
-            thread_slider_value.lock().unwrap().clone()
-        } as usize;
+        let size = { thread_slider_value.lock().unwrap().clone() } as usize;
         let mut buffer: Vec<f32> = Vec::new();
         for _ in 0..size {
             let frames = receiver.recv().unwrap();
@@ -82,13 +99,14 @@ fn model(app: &App) -> Model {
         ui,
         slider_id: slider_id,
         slider_value: slider_value,
+        _synth_controller: wrapped_synth_controller.clone(),
+        _osc_receiver: osc_receiver,
     }
 }
 
 fn update(_app: &App, model: &mut Model, _update: Update) {
-    let mut slider_value = model.slider_value.lock().unwrap(); 
+    let mut slider_value = model.slider_value.lock().unwrap();
     let size = slider_value.clone() as f32;
-    
 
     for value in widget::Slider::new(size, 20.0, 500.0)
         .w_h(400.0, 30.0)
@@ -100,7 +118,7 @@ fn update(_app: &App, model: &mut Model, _update: Update) {
         .label(&format!("Scale: {}", size as usize))
         .set(model.slider_id, &mut model.ui.set_widgets())
     {
-       *slider_value = value;
+        *slider_value = value;
     }
 }
 

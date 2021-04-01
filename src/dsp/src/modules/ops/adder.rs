@@ -49,7 +49,6 @@ impl Module for Adder {
     }
 }
 
-
 impl MonoGenerator for Adder {
     fn get_output(&self) -> SharedBuffer {
         Adder::get_output(&self)
@@ -65,4 +64,3 @@ impl StereoGenerator for Adder {
         Adder::get_output(&self)
     }
 }
-

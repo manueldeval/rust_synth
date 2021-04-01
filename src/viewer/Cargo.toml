@@ -11,6 +11,7 @@ granular =  {path = "../granular" }
 anyhow = "1.0"
 nannou = "0.15.0"
 crossbeam = "0.8.0"
+rosc = "0.5.1"
 
 [[bin]]
 name="viewer"

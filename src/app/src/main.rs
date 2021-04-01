@@ -1,85 +1,69 @@
-use std::io::{stdin, stdout, Write};
-extern crate termion;
-
-use termion::{event::Key, input::TermRead};
-use termion::raw::IntoRawMode;
-extern crate anyhow;
-
-extern crate audio;
+use std::io::prelude::*;
+use std::{
+    io,
+    sync::{Arc, Mutex},
+};
 
 use audio::{player::Player, synthengine::StereoGeneratorFactory};
-use granular::{Granular, event::{Event, EventReceiver, EventSender, create_event_sender_receiver}};
+use dsp::core::OscReceiver;
+use granular::{
+    create_event_sender_receiver, EventReceiver, EventSender, GranularController,
+    GranularOscMessageHandler, GranularSynth,
+};
 
+//===================================
+// Synth factory
+#[derive(Clone)]
 struct SoundGeneratorFactory {
-    pub event_sender: EventSender,
-    pub event_receiver: EventReceiver,
+    event_sender: EventSender,
+    event_receiver: EventReceiver,
 }
-impl Clone for SoundGeneratorFactory {
-    fn clone(&self) -> Self {
-        SoundGeneratorFactory {
-            event_sender: self.event_sender.clone(),
-            event_receiver: self.event_receiver.clone()
-        }
-    }
-}
-
 impl SoundGeneratorFactory {
     pub fn new() -> Self {
-        let (event_sender,event_receiver) = create_event_sender_receiver();
+        let (s, r) = create_event_sender_receiver();
         SoundGeneratorFactory {
-            event_sender,
-            event_receiver
+            event_sender: s,
+            event_receiver: r,
         }
     }
 }
+
 impl StereoGeneratorFactory for SoundGeneratorFactory {
-    type Gen = Granular;
+    type Gen = GranularSynth;
     fn create(&self) -> Self::Gen {
-        let mut osc = Granular::new(self.event_receiver.clone());
-        osc.set_frequency(220.0);
-        osc
+        GranularSynth::new(self.event_receiver.clone())
     }
 }
 
-fn main() -> anyhow::Result<()> {
-    let synth_factory = SoundGeneratorFactory::new();
-    let event_sender = synth_factory.event_sender.clone();
-    let mut player = Player::new(synth_factory, None);
-    player.start()?;
-    event_loop(event_sender);
-    player.stop();
-    Ok(())
+fn main() {
+    // Sound generator
+    let sound_generator_factory = SoundGeneratorFactory::new();
+    let control_channel = sound_generator_factory.event_sender.clone();
+    let mut player = Player::new(sound_generator_factory, None);
+
+    let sample_rate = player.start().unwrap();
+
+    let mut synth_controller = GranularController::new(control_channel, sample_rate);
+    let _ = synth_controller
+       .load_samples("/home/deman/projets/perso/rust/granular/mission24000.wav".to_owned());
+
+    let wrapped_synth_controller = Arc::new(Mutex::new(synth_controller));
+    let mut osc_receiver = OscReceiver::new(
+        "127.0.0.1:9666".to_owned(),
+        GranularOscMessageHandler::new(wrapped_synth_controller.clone()),
+    );
+    osc_receiver.start().unwrap();
+    pause();
 }
 
-fn event_loop(sender: EventSender) {
-    let stdin = stdin();
-    let mut stdout = stdout().into_raw_mode().unwrap();
+fn pause() {
+    let mut stdin = io::stdin();
+    let mut stdout = io::stdout();
 
-    for c in stdin.keys() {
-        write!(
-            stdout,
-            "{}{}",
-            termion::cursor::Goto(1, 1),
-            termion::clear::All
-        )
-        .unwrap();
-        match c.unwrap() {
-            Key::Char('a') => sender.send(Event::NoteOn(1,57,127)),
-            Key::Char('z') => sender.send(Event::NoteOn(1,58,127)),
-            Key::Char('e') => sender.send(Event::NoteOn(1,59,127)),
-           
-            Key::Ctrl('a') => sender.send(Event::NoteOff(1,57)),
-            Key::Ctrl('z') => sender.send(Event::NoteOff(1,58)),
-            Key::Ctrl('e') => sender.send(Event::NoteOff(1,59)),
+    // We want the cursor to stay at the end of the line, so we print without a newline and flush manually.
+    write!(stdout, "Press any key to continue...").unwrap();
+    stdout.flush().unwrap();
 
-            Key::Char('q') | Key::Ctrl('c') => {
-                println!("Quit");
-                break
-            },
-            Key::Char(c) => {println!("{}",c);},
-            _ => {},
-        }
-        stdout.flush().unwrap();
-    }
-
+    // Read a single byte and discard
+    let _ = stdin.read(&mut [0u8]).unwrap();
 }

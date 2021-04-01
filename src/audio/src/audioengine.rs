@@ -71,7 +71,7 @@ impl AudioEngine {
         }
     }
 
-    pub fn start(&mut self) -> Result<(), anyhow::Error> {
+    pub fn start(&mut self) -> Result<f32, anyhow::Error> {
         let host = cpal::default_host();
         let device = host
             .default_output_device()
@@ -80,7 +80,7 @@ impl AudioEngine {
 
         println!("Output device: {}", device.name()?);
         println!("Default output config: {:?}", config);
-
+        let sample_rate = config.sample_rate().0 as f32;
         let sample_format = config.sample_format();
 
         let stream_config: cpal::StreamConfig = config.into();
@@ -93,7 +93,7 @@ impl AudioEngine {
             cpal::SampleFormat::I16 => self.run::<i16>(device, stream_config),
             cpal::SampleFormat::U16 => self.run::<u16>(device, stream_config),
         };
-        return Ok(());
+        return Ok(sample_rate);
     }
 
     fn run<T>(&mut self, device: cpal::Device, config: cpal::StreamConfig)

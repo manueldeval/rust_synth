@@ -43,7 +43,7 @@ where
         }
     }
 
-    pub fn start(&mut self) {
+    pub fn start(&mut self, sample_rate: f32) {
         let audio_buffer_sender = self.audio_buffer_sender.clone();
         let command_receiver = self.command_receiver.clone();
 
@@ -53,6 +53,7 @@ where
         thread::spawn(move || {
             // Create synth
             let mut stereo_generator = factory.create();
+            stereo_generator.set_sample_rate(sample_rate);
             // Play!
             loop {
                 match command_receiver.try_recv() {
