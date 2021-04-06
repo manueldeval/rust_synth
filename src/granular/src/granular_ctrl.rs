@@ -1,14 +1,17 @@
-use crate::{
-    errors::GranularError,
-    event::{Event, EventSender},
-};
+use std::{sync::{Arc, Mutex}, thread};
+
+use ring_channel::RingReceiver;
+use crate::GuiEvent;
+use crate::{GranularError, GuiEventSender, SynthEvent, SynthEventSender, SynthState};
+
 
 // =========================
 // CONTROLLER
 // =========================
 
 pub struct GranularController {
-    event_sender: EventSender,
+    synth_event_sender: SynthEventSender,
+    gui_event_sender: Option<GuiEventSender>,
     current_file: Option<String>,
     samples: Vec<f32>,
     sample_rate: f32,
@@ -19,7 +22,11 @@ pub struct GranularController {
 }
 
 impl GranularController {
-    pub fn new(event_sender: EventSender, sample_rate: f32) -> Self {
+    pub fn new(
+        synth_event_sender: SynthEventSender,
+        gui_event_sender: Option<GuiEventSender>,
+        sample_rate: f32,
+    ) -> Self {
         let current_file = None;
         let samples = vec![];
         let main_level = 1.0;
@@ -27,7 +34,8 @@ impl GranularController {
         let end = 0.0;
         let semi_tones = 0.0;
         Self {
-            event_sender,
+            synth_event_sender,
+            gui_event_sender,
             current_file,
             samples,
             sample_rate,
@@ -39,14 +47,15 @@ impl GranularController {
     }
     pub fn set_level(&mut self, level: f32) {
         self.main_level = level;
-        self.event_sender.send(Event::MainLevel(level));
+        self.synth_event_sender.send(SynthEvent::MainLevel(level));
     }
     pub fn set_start(&mut self, start: f32) {
         if start < self.end {
             self.start = start;
 
             let start_at_sample = ((self.samples.len() as f32) * start) as usize;
-            self.event_sender.send(Event::Start(start_at_sample));
+            self.synth_event_sender
+                .send(SynthEvent::Start(start_at_sample));
         }
     }
     pub fn set_end(&mut self, end: f32) {
@@ -54,13 +63,22 @@ impl GranularController {
             self.end = end;
 
             let end_at_sample = ((self.samples.len() as f32) * end) as usize;
-            self.event_sender.send(Event::End(end_at_sample));
+            self.synth_event_sender.send(SynthEvent::End(end_at_sample));
         }
     }
     pub fn set_tune(&mut self, semi_tones: f32) {
         self.semi_tones = semi_tones;
         let ratio = 2.0_f32.powf(semi_tones / 12.0);
-        self.event_sender.send(Event::Step(ratio));
+        self.synth_event_sender.send(SynthEvent::Step(ratio));
+    }
+
+    pub fn update_synth_state(&mut self, state: SynthState){
+        if let Some(gui_sender) = &self.gui_event_sender {
+
+            //println!("POSITION: {}/{}",self.samples.len() as f32,state.index);
+
+            gui_sender.send(GuiEvent::Position(state.index/self.samples.len() as f32));
+        }
     }
 
     pub fn load_samples(&mut self, file_name: String) -> Result<(), GranularError> {
@@ -111,9 +129,45 @@ impl GranularController {
         }
 
         // Send data to Synth
-        let vec_to_send: Vec<f32> = self.samples.iter().copied().collect();
-        self.event_sender.send(Event::LoadSound(vec_to_send));
+        let vec_to_send_to_synth: Vec<f32> = self.samples.iter().copied().collect();
+        self.synth_event_sender
+            .send(SynthEvent::LoadSound(vec_to_send_to_synth));
+
+        // Send data to gui
+        if let Some(gui_sender) = &self.gui_event_sender {
+            let window_size = self.samples.len() / 600;
+            let vec_to_send_to_gui: Vec<f32> = if window_size <= 1 {
+                vec![0.0]
+            } else {
+                let w = self.samples.chunks(window_size);
+                let rms: Vec<f32> = w.into_iter()
+                    .map(|w| w.iter().map(|v| *v * *v).sum::<f32>().sqrt())
+                    .collect();
+                let mut mx: f32 = 0.0;
+                for v in &rms {
+                    if *v > mx {
+                        mx = *v;
+                    }
+                }
+                rms.iter().map(|v| v / mx).collect()
+            };
+            gui_sender.send(GuiEvent::SampleRms(vec_to_send_to_gui));
+        }
 
         Ok(())
     }
 }
+
+pub fn synth_to_ctrl_state_synchro(synth_state_receiver: RingReceiver<SynthState>, wrapped_synth_controller: Arc<Mutex<GranularController>>) {
+        // Syncho state!
+        let mut synth_state_receiver = synth_state_receiver.clone();
+        thread::spawn(move || {
+            loop {
+                if let Ok(state) = synth_state_receiver.recv() {
+                    let mut ctrl = wrapped_synth_controller.lock().unwrap();
+                    ctrl.update_synth_state(state);
+                }
+            }
+        });
+}
+

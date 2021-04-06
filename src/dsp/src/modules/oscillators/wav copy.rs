@@ -2,6 +2,7 @@ use std::{cell::RefCell, f32, rc::Rc};
 
 use crate::core::{Buffer, Module, MonoGenerator, SharedBuffer, StereoGenerator};
 
+
 pub struct Samples {
     samples: Vec<f32>,
     output: SharedBuffer,
@@ -60,20 +61,6 @@ impl Samples {
     pub fn set_step(&mut self, step: f32) {
         self.step = step;
     }
-
-    fn next_index(&self) -> f32 {
-        let new_index = self.index + self.step;
-        // -1 because of the interpolation.
-        if new_index >= self.end as f32 - 1.0 {
-            self.start as f32
-        } else {
-            new_index
-        }
-    }
-
-    pub fn current_index(&self) -> f32 {
-        self.index
-    }
 }
 
 impl Module for Samples {
@@ -89,13 +76,12 @@ impl Module for Samples {
             let v1 = self.samples[i + 1];
 
             *b = self.level * ((1.0 - w) * v0 + w * v1);
-            self.index = self.next_index();
 
-            // self.index += self.step;
-            // // -1 because of the interpolation.
-            // if self.index >= self.end as f32 - 1.0 {
-            //     self.index = self.start as f32
-            // }
+            self.index += self.step;
+            // -1 because of the interpolation.
+            if self.index >= self.end as f32 - 1.0 {
+                self.index = self.start as f32
+            }
         }
     }
 

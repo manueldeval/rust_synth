@@ -729,6 +729,7 @@ dependencies = [
  "crossbeam",
  "dsp",
  "granular",
+ "ring-channel",
  "rosc",
  "termion",
 ]
@@ -1154,6 +1155,7 @@ dependencies = [
  "crossbeam",
  "dsp",
  "hound",
+ "ring-channel",
  "rosc",
  "strum",
  "strum_macros",
@@ -2617,6 +2619,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "24d5f089152e60f62d28b835fbff2cd2e8dc0baf1ac13343bef92ab7eed84548"
 
 [[package]]
+name = "ring-channel"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d26acc9f86b2dcfd4096a87cb88eced9eafd655f61197a29a77af190a0c8f1f2"
+dependencies = [
+ "crossbeam-queue",
+ "crossbeam-utils 0.8.3",
+ "derivative",
+ "futures",
+ "smallvec",
+ "spinning_top",
+]
+
+[[package]]
 name = "rosc"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2771,6 +2787,15 @@ checksum = "917e8ec7f535cd1a6cbf749c8866c24d67c548a80ac48c8e88a182eab5c07bd1"
 dependencies = [
  "nix 0.14.1",
  "smithay-client-toolkit",
+]
+
+[[package]]
+name = "spinning_top"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8bd0ab6b8c375d2d963503b90d3770010d95bc3b5f98036f948dee24bf4e8879"
+dependencies = [
+ "lock_api 0.4.2",
 ]
 
 [[package]]

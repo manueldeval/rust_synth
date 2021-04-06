@@ -12,6 +12,7 @@ crossbeam = "0.8.0"
 granular = { path="../granular" }
 anyhow = "1.0"
 rosc = "0.5.1"
+ring-channel = "0.8"
 
 [[bin]]
 name="demoapp"

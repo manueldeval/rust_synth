@@ -55,35 +55,24 @@ where
             loop {
                 match command_receiver.try_recv() {
                     // No command message
-                    Err(TryRecvError::Empty) => {
-                        match sock.recv_from(&mut buf) {
-                            Ok((size, addr)) => {
-                                println!("Received packet with size {} from: {}", size, addr);
-                                let packet = rosc::decoder::decode(&buf[..size]).unwrap();
-                                match packet {
-                                    OscPacket::Message(msg) => {
-                                        message_handler.handle_message(msg);
-
-                                        // match (&msg.addr[..],msg.args.as_slice()) {
-                                        //     ("/button/",[OscType::Float(e)]) => {
-                                        //         println!("BUTTON: {}",e)
-                                        //     }
-                                        //     _ => {
-                                        //         println!("No match for OSC address: {}, OSC arguments: {:?}", msg.addr,msg.args);
-                                        //     }
-                                        // };
-                                    }
-                                    OscPacket::Bundle(bundle) => {
-                                        println!("OSC Bundle: {:?}", bundle);
-                                    }
+                    Err(TryRecvError::Empty) => match sock.recv_from(&mut buf) {
+                        Ok((size, addr)) => {
+                            println!("Received packet with size {} from: {}", size, addr);
+                            let packet = rosc::decoder::decode(&buf[..size]).unwrap();
+                            match packet {
+                                OscPacket::Message(msg) => {
+                                    message_handler.handle_message(msg);
+                                }
+                                OscPacket::Bundle(bundle) => {
+                                    println!("OSC Bundle: {:?}", bundle);
                                 }
                             }
-                            Err(e) => {
-                                println!("Error receiving from socket: {}", e);
-                                break;
-                            }
                         }
-                    }
+                        Err(e) => {
+                            println!("Error receiving from socket: {}", e);
+                            break;
+                        }
+                    },
                     // Stop
                     Ok(OscReceiverCommand::Stop) => {
                         break;
