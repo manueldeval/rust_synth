@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use strum_macros::Display;
 
@@ -8,6 +10,11 @@ pub enum SynthEvent {
     Start(usize),
     End(usize),
     Step(f32),
+    PanSpread(f32),
+    ScanSpread(f32),
+    GrainStep(f32),
+    GrainsPerSec(f32),
+    GrainEnvelop(f32,f32,f32),
 }
 
 #[derive(Clone)]
@@ -64,7 +71,7 @@ pub struct GuiEventReceiver {
 
 impl GuiEventReceiver {
     pub fn receive(&self) -> Option<GuiEvent> {
-        self.receiver.try_recv().map(|e| Some(e)).unwrap_or(None)
+        self.receiver.recv_timeout(Duration::from_millis(100)).map(|e| Some(e)).unwrap_or(None)
     }
 }
 

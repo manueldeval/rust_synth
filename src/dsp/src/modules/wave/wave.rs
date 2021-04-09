@@ -57,6 +57,40 @@ impl Wave for SineWave {
     }
 }
 
+const WAVE_COS_SIZE: usize = 44100;
+lazy_static! {
+    static ref COS: [f32; WAVE_COS_SIZE] = {
+        let mut result: [f32; WAVE_COS_SIZE] = [0.0; WAVE_COS_SIZE];
+        for (x, y) in result.iter_mut().zip(0..WAVE_COS_SIZE) {
+            *x = (y as f32 * 2.0 * std::f32::consts::PI / WAVE_COS_SIZE as f32).cos();
+        }
+        result
+    };
+}
+
+pub struct CosWave {}
+
+impl Wave for CosWave {
+    fn get_at(&self, location: f32) -> f32 {
+        match location {
+            e if e < 0.0 => COS[0],
+            e if e >= 1.0 => COS[WAVE_COS_SIZE - 1],
+            _ => {
+                let idx_as_float = WAVE_COS_SIZE as f32 * location;
+                let idx1 = idx_as_float as usize;
+                let idx2 = idx1 + 1;
+                if idx2 < WAVE_COS_SIZE {
+                    let weight = idx_as_float.fract();
+                    COS[idx1] * (1.0 - weight) + COS[idx2] * weight
+                } else {
+                    COS[idx1]
+                }
+            }
+        }
+    }
+}
+
+
 pub struct SquareWave {}
 
 impl Wave for SquareWave {

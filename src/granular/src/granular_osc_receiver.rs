@@ -44,6 +44,30 @@ impl OscMessageHandler for GranularOscMessageHandler {
             ("/tune", [OscType::Float(semi_tones)]) => {
                 println!("Change tune: {}", semi_tones);
                 ctrl.set_tune(*semi_tones);
+            },
+            ("/pan_spread", [OscType::Float(spread)]) => {
+                println!("Change pan spread: {}", spread);
+                ctrl.set_pan_spread(*spread);
+            },
+            ("/scan_spread", [OscType::Float(spread)]) => {
+                println!("Change scan spread: {}", spread);
+                ctrl.set_scan_spread(*spread);
+            }
+            ("/grain_tune", [OscType::Float(tune)]) => {
+                println!("Change grain tune: {}", tune);
+                ctrl.set_grain_tune(*tune);
+            }
+            ("/grains_per_sec", [OscType::Float(grains_per_sec)]) => {
+                println!("Change grains per sec: {}", grains_per_sec);
+                ctrl.set_grains_per_sec(*grains_per_sec);
+            }
+            ("/grain_length", [OscType::Float(grain_length)]) => {
+                println!("Change grain_length: {}", grain_length);
+                ctrl.set_grain_length(*grain_length);
+            }
+            ("/grain_env", [OscType::Float(attack),OscType::Float(release)]) => {
+                println!("Change grain_env: {} / {}", attack, release);
+                ctrl.set_grain_attack_release_ratio(*attack,*release);
             }
             _ => {
                 println!(

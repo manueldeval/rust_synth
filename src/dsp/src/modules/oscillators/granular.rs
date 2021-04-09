@@ -1,313 +1,245 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, f32, rc::Rc};
 
 use crate::core::{Buffer, Module, MonoGenerator, SharedBuffer, StereoGenerator};
 
-#[derive(PartialEq)]
-enum GrainState {
-    SlopeUp,
-    SlopeDown,
-    Release,
-    Inactive,
-}
+use super::{GrainResult, Grains, MAX_GRAINS};
 
-impl Into<usize> for GrainState {
-    fn into(self) -> usize {
-        match self {
-            GrainState::Inactive => 4,
-            GrainState::SlopeDown => 3,
-            GrainState::SlopeUp => 2,
-            GrainState::Release => 1,
-        }
-    }
-}
-
-struct Grain {
-    state: GrainState,
-    level: f32,
-    location: usize,
-    release_time: usize,
-}
-
-impl Grain {
-    pub fn new() -> Self {
-        Self {
-            state: GrainState::Inactive,
-            level: 0.0,
-            location: 0,
-            release_time: 0,
-        }
-    }
-
-    pub fn restart(&mut self, location: usize) {
-        self.location = location;
-        self.release_time = 0;
-        self.state = GrainState::SlopeUp;
-        self.level = 0.0;
-    }
-
-    pub fn next(&mut self, slope_step: f32, duration: usize) -> Option<(usize, f32)> {
-        self.location += 1;
-
-        match &self.state {
-            GrainState::Inactive => None,
-            GrainState::Release => {
-                self.release_time += 1;
-
-                if self.release_time > duration {
-                    self.state = GrainState::SlopeDown;
-                };
-                Some((self.location, 1.0))
-            }
-            GrainState::SlopeUp => {
-                let new_level = self.level + slope_step;
-                self.level = new_level.min(1.0);
-
-                if self.level == 1.0 {
-                    self.state = GrainState::Release;
-                }
-                Some((self.location, self.level))
-            }
-            GrainState::SlopeDown => {
-                let new_level = self.level - slope_step;
-
-                self.level = new_level.max(0.0);
-
-                if self.level == 0.0 {
-                    self.state = GrainState::Inactive;
-                }
-                Some((self.location, self.level))
-            }
-        }
-    }
-}
-
-struct Grains {
-    grains: [Grain; 2],
-    slope_step: f32,
-    duration: usize,
-    grain_offset: usize,
-    current_grain_offset: usize,
-    _sample_length: usize,
-    start: usize,
-    end: usize,
-    current_position: usize,
-}
-
-impl Grains {
-    fn new(sample_length: usize) -> Self {
-        Self {
-            grains: [Grain::new(), Grain::new()],
-            slope_step: 0.05,
-            duration: 10,
-            grain_offset: 0,
-            current_grain_offset: 0,
-            _sample_length: sample_length,
-            start: 0,
-            end: if sample_length > 0 {
-                sample_length - 1
-            } else {
-                0
-            },
-            current_position: 0,
-        }
-    }
-    pub fn get_available_grain_index(&self) -> Option<usize> {
-        self.grains
-            .iter()
-            .position(|g| g.state == GrainState::Inactive)
-    }
-
-    pub fn must_respawn_new_grain(&self) -> bool {
-        // We can respan an new grain if there is actually no
-        // SlopeUp and Release state
-        self.grains[0].state != GrainState::SlopeUp
-            && self.grains[0].state != GrainState::Release
-            && self.grains[1].state != GrainState::SlopeUp
-            && self.grains[1].state != GrainState::Release
-    }
-
-    pub fn next(&mut self) -> Vec<(usize, f32)> {
-        // If inactive, create one!
-        if self.must_respawn_new_grain() {
-            match self.get_available_grain_index() {
-                Some(idx) => {
-                    // Temporization beetween two grains
-                    if self.current_grain_offset >= self.grain_offset {
-                        //let pos = ((self.end - self.start) as f32 / 2.0) * (1.0+(2.0*std::f32::consts::PI * (self.current_position - self.start) as f32 /(self.end - self.start)as f32 ) .sin())/2.0 + self.start as f32;
-
-                        let pos = self.current_position / 2;
-
-                        self.grains[idx].restart(pos as usize);
-                        //self.grains[idx].restart(self.current_position);
-
-                        // Reset the cooldown beetween each grain.
-                        self.current_grain_offset = 0;
-                    } else {
-                        self.current_grain_offset += 1;
-                    }
-                }
-                None => {}
-            }
-        };
-
-        // Update position (todo: non linear)
-        if self.current_position >= self.end {
-            self.current_position = self.start;
-        }
-        // if self.current_position <= self.start {
-        //     self.current_position = self.end - 1;
-        // }
-        else {
-            self.current_position += 1;
-        }
-
-        // Compute
-        let mut result: Vec<(usize, f32)> = vec![];
-        for g in self.grains.iter_mut() {
-            let next_result = g.next(self.slope_step, self.duration);
-            match next_result {
-                Some(tuple) => result.push(tuple),
-                None => {}
-            };
-        }
-
-        result
-    }
-}
-
-pub struct Granular {
-    original_wav: Vec<f32>,
-    original_sample_rate: f32,
-    converted_wav: Vec<f32>,
-    output: SharedBuffer,
-    _index: usize,
+pub struct Granulator {
+    samples: Vec<f32>,
+    output_left: SharedBuffer,
+    output_right: SharedBuffer,
+    index: f32,
+    step: f32,
     sample_rate: f32,
-
-    // Granular
-    grains: Grains,
+    level: f32,
+    start: usize, // Included
+    end: usize, 
+    grains: Grains,  // Excluded
+    pan_spread: f32,
+    scan_spread: f32,
+    grain_step: f32,
+    grain_attack_slope: f32,
+    grain_sustain_duration: f32,
+    grain_release_slope: f32,
 }
 
-impl Granular {
-    pub fn new(sound_file: &str) -> Self {
-        let mut reader = hound::WavReader::open(sound_file).unwrap();
-        let spec = reader.spec();
-        println!("Channels: {}", spec.channels);
-        println!("Sample rate: {}", spec.sample_rate);
-        println!("Bits_per_sample: {}", spec.bits_per_sample);
-        let original_sample_rate = spec.sample_rate as f32;
-        // Todo concert to target sample rate.
-        let max_value = 2.0f32.powi(spec.bits_per_sample as i32);
-        let data: Vec<f32> = reader
-            .samples::<i32>()
-            .map(|e| e.unwrap())
-            .step_by(spec.channels as usize)
-            .map(|v| (v as f32) / max_value)
-            .collect();
+impl Granulator {
+    pub fn new() -> Self {
+        let index = 0.0;
+        let step = 1.0;
+        let sample_rate = 44_100_f32;
+        let output_left = Rc::new(RefCell::new(Buffer::new()));
+        let output_right = Rc::new(RefCell::new(Buffer::new()));
 
-        let default_sample_rate = 44_100_f32;
-        let mut samples = Granular {
-            _index: 0,
-            original_wav: data,
-            output: Rc::new(RefCell::new(Buffer::new())),
-            sample_rate: default_sample_rate,
-            original_sample_rate,
-            converted_wav: vec![],
+        let samples = vec![0.0, 0.0, 0.0, 0.0, 0.0];
+        let level = 1.0;
+        let start = 0;
+        let end = samples.len();
 
-            // GRANULATOR!
-            grains: Grains::new(0),
-        };
-        samples.set_sample_rate(default_sample_rate);
-        samples
+        let grains = Grains::new(200.0);
+        let pan_spread = 0.0;
+        let scan_spread = 0.0;
+        let grain_step = 1.0;
+
+        let grain_attack_slope = 0.1;
+        let grain_sustain_duration = 1_000.0;
+        let grain_release_slope= -0.1;
+        Self {
+            index,
+            step,
+            output_left,
+            output_right,
+            sample_rate,
+            samples,
+            level,
+            start,
+            end,
+            grains,
+            pan_spread,
+            scan_spread,
+            grain_step,
+            grain_attack_slope,
+            grain_sustain_duration,
+            grain_release_slope,
+        }
     }
 
-    fn convert_sample_rate(&mut self) {
-        self.converted_wav = vec![];
-        if self.original_sample_rate == self.sample_rate {
-            // Copy
-            for v in &self.original_wav {
-                self.converted_wav.push(*v);
-            }
+    pub fn load_samples(&mut self, samples: Vec<f32>) {
+        self.samples = samples;
+        self.index = 0.0;
+        self.start = 0;
+        self.end = self.samples.len();
+    }
+
+    pub fn set_level(&mut self, level: f32) {
+        self.level = level;
+    }
+
+    pub fn set_start(&mut self, start: usize) {
+        self.start = start;
+    }
+
+    pub fn set_end(&mut self, end: usize) {
+        self.end = end;
+        if self.index >= end as f32 {
+            self.index = self.start as f32
+        }
+    }
+
+    pub fn set_step(&mut self, step: f32) {
+        self.step = step;
+    }
+    pub fn set_grain_step(&mut self,step: f32){
+        self.grain_step = step;
+    }
+    pub fn set_pan_spread(&mut self, pan: f32){
+        self.pan_spread = pan;
+    }
+
+    pub fn set_grains_per_sec(&mut self, grains_per_sec: f32) {
+        self.grains.set_grain_density(self.sample_rate / grains_per_sec);
+    }
+
+    pub fn set_scan_spread(&mut self,scan_spread: f32){
+        self.scan_spread = scan_spread;
+    }
+
+    pub fn set_grain_attack_slope(&mut self,v: f32){
+        self.grain_attack_slope = v;
+    }
+    pub fn set_grain_sustain_duration(&mut self,v: f32){
+        self.grain_sustain_duration = v;
+    }
+    pub fn set_grain_release_slope(&mut self,v: f32){
+        self.grain_release_slope = v;
+    }
+
+    fn next_index(&self) -> f32 {
+        let new_index = self.index + self.step;
+        // -1 because of the interpolation.
+        if new_index >= self.end as f32 - 1.0 {
+            self.start as f32
         } else {
-            let ratio = self.sample_rate / self.original_sample_rate;
-
-            if ratio < 1.0 {
-                // Down sampling
-                let new_size = (ratio * self.original_wav.len() as f32).round() as usize;
-                for target_idx in 0..new_size {
-                    let source_idx = (target_idx as f32 / ratio).round() as usize;
-                    self.converted_wav.push(self.original_wav[source_idx]);
-                }
-            } else {
-                // Upper sampling
-                let new_size = (ratio * self.original_wav.len() as f32).round() as usize;
-                for target_idx in 0..new_size {
-                    let source_idx = (target_idx as f32 / ratio).trunc() as usize;
-                    let coef = (target_idx as f32 / ratio).fract();
-                    if source_idx + 1 >= self.original_wav.len() {
-                        break;
-                    }
-                    self.converted_wav.push(
-                        (1.0 - coef) * self.original_wav[source_idx]
-                            + self.original_wav[source_idx + 1] * coef,
-                    );
-                }
-            }
+            new_index
         }
-        self.grains = Grains::new(self.converted_wav.len());
-        self.grains.start = 0;
-        self.grains.end = self.converted_wav.len();
-        self.grains.current_position = 0;
+    }
+
+    pub fn current_index(&self) -> f32 {
+        self.index
+    }
+
+    #[inline] 
+    fn get_value_at(&self,position: i32) -> f32 {
+        self.samples[position as usize]
+    }
+
+    #[inline] 
+    fn get_interpolated_value_at(&self,position: f32) -> f32 {
+        let idx = position as i32;
+        let w = position.fract();
+        let v0 = self.get_value_at(idx);
+        let v1 = self.get_value_at(idx + 1); 
+        (1.0 - w) * v0 + w * v1
     }
 }
 
-impl Module for Granular {
+impl Module for Granulator {
     fn process(&mut self) {
-        let mut wrapped_buf = self.output.try_borrow_mut().unwrap();
-        let buf = wrapped_buf.get_mut();
+        let mut wrapped_buf_left = self.output_left.try_borrow_mut().unwrap();
+        let mut wrapped_buf_right = self.output_right.try_borrow_mut().unwrap();
 
-        for b in buf {
-            *b = self
-                .grains
-                .next()
-                .iter()
-                .fold(0.0, |sum: f32, (pos, level)| {
-                    if *pos >= self.converted_wav.len() {
-                        0.0
-                    } else {
-                        sum + level * self.converted_wav[*pos]
-                    }
+        let buf_left = wrapped_buf_left.get_mut();
+        let buf_right = wrapped_buf_right.get_mut();
+        let grain_step = self.grain_step;
+        let start = 0.0;
+        let end = self.samples.len() as f32 - 1.0;
+        let attack_slope = self.grain_attack_slope;
+        let sustain_duration = self.grain_sustain_duration;
+        let release_slope = self.grain_release_slope;
+
+        // self.grains.grain_scheduler(grain_step*buf_left.len() as f32,
+        //     self.index, 
+        //     self.pan_spread, 
+        //     self.scan_spread * (self.samples.len() as f32/2.0), 
+        //     attack_slope, 
+        //     sustain_duration,
+        //     release_slope);
+        let mut vec_result: Vec<GrainResult> = Vec::with_capacity(MAX_GRAINS);
+        for (b_l,b_r) in buf_left.iter_mut().zip(buf_right) {
+            self.grains.grain_scheduler(grain_step,
+                self.index, 
+                self.pan_spread, 
+                self.scan_spread * (self.samples.len() as f32/2.0), 
+                attack_slope, 
+                sustain_duration,
+                release_slope);
+
+            let mut l_value = 0.0;
+            let mut r_value = 0.0;
+            let mut left = 0.0;
+            let mut right = 0.0;            
+            
+            // let results: Vec<GrainResult> = self.grains.grains
+            //     .iter_mut()
+            //     .map(|g| g.next(grain_step,start,end))
+            //     .filter_map(|g| g)
+            //     .collect();
+            
+            // results.iter().for_each(|r| {
+            //         l_value += r.l_value;
+            //         r_value += r.r_value;
+            //         let sample_value = self.get_interpolated_value_at(r.position);
+            //         left += r.l_value * sample_value;
+            //         right += r.r_value * sample_value;
+            // });
+
+            vec_result.clear();
+
+            self.grains.grains
+                .iter_mut()
+                .map(|g| g.next(grain_step,start,end))
+                .filter_map(|g| g)
+                .for_each(|src|{
+                    vec_result.push(src);
                 });
-        }
-        // for b in buf {
-        //     *b = self.converted_wav[self.index];
-        //     self.index += 1;
+            
+            vec_result.iter().for_each(|r| {
+                    l_value += r.l_value;
+                    r_value += r.r_value;
+                    let sample_value = self.get_interpolated_value_at(r.position);
+                    left += r.l_value * sample_value;
+                    right += r.r_value * sample_value;
+            });
 
-        //     self.index = if self.index < self.converted_wav.len() {
-        //         self.index
-        //     } else {
-        //         0
-        //     }
-        // }
+            if l_value > 1.0 {
+                left = left/l_value;
+            } 
+            if r_value > 1.0 {
+                right = right/r_value;
+            } 
+            *b_l  = self.level * left;
+            *b_r = self.level * right;
+            self.index = self.next_index();
+        }
     }
 
     fn set_sample_rate(&mut self, sample_rate: f32) {
         self.sample_rate = sample_rate;
-        self.convert_sample_rate();
     }
 }
 
-impl MonoGenerator for Granular {
+impl MonoGenerator for Granulator {
     fn get_output(&self) -> SharedBuffer {
-        self.output.clone()
+        self.output_left.clone()
     }
 }
 
-impl StereoGenerator for Granular {
+impl StereoGenerator for Granulator {
     fn get_left_output(&self) -> SharedBuffer {
-        self.output.clone()
+        self.output_left.clone()
     }
 
     fn get_right_output(&self) -> SharedBuffer {
-        self.output.clone()
+        self.output_right.clone()
     }
 }

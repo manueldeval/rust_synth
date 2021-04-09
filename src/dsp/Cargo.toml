@@ -12,6 +12,7 @@ hound = "3.4.0"
 thiserror= "1.0.24"
 rosc = "0.5.1"
 crossbeam = "0.8.0"
+fastrand= "1.4.0"
 
 [lib]
 path="src/lib.rs"

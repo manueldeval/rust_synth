@@ -1,15 +1,11 @@
-use std::{cell::RefCell, rc::Rc};
-use dsp::{
-    core::{Module, SharedBuffer, StereoGenerator},
-    modules::oscillators::Samples,
-};
+use dsp::{core::{Module, SharedBuffer, StereoGenerator}, modules::oscillators::Granulator};
 use ring_channel::*;
+use std::{cell::RefCell, rc::Rc};
 
 use crate::event::{SynthEvent, SynthEventReceiver};
 
-
 pub struct SynthState {
-    pub index: f32
+    pub index: f32,
 }
 
 const STATE_COUNT: u16 = 50;
@@ -17,7 +13,7 @@ const STATE_COUNT: u16 = 50;
 // SYNTH
 // =========================
 pub struct GranularSynth {
-    granular_osc: Rc<RefCell<Samples>>,
+    granular_osc: Rc<RefCell<Granulator>>,
 
     output: Rc<RefCell<dyn StereoGenerator>>,
     all: Vec<Rc<RefCell<dyn Module>>>,
@@ -28,8 +24,7 @@ pub struct GranularSynth {
 
 impl GranularSynth {
     pub fn new(recv: SynthEventReceiver, state_sender: RingSender<SynthState>) -> Self {
-
-        let granular_osc = Rc::new(RefCell::new(Samples::new()));
+        let granular_osc = Rc::new(RefCell::new(Granulator::new()));
         let all: Vec<Rc<RefCell<dyn Module>>> = vec![granular_osc.clone()];
 
         Self {
@@ -62,17 +57,34 @@ impl GranularSynth {
                 SynthEvent::Step(step) => {
                     granular.set_step(step);
                 }
+                SynthEvent::PanSpread(pan) => {
+                    granular.set_pan_spread(pan);
+                }
+                SynthEvent::ScanSpread(spread) => {
+                    granular.set_scan_spread(spread);
+                }
+                SynthEvent::GrainStep(step) => {
+                    granular.set_grain_step(step);
+                }
+                SynthEvent::GrainsPerSec(grains_per_sec) => {
+                    granular.set_grains_per_sec(grains_per_sec);
+                }
+                SynthEvent::GrainEnvelop(attack_slope,sustain_duration,release_slope) => {
+                    granular.set_grain_attack_slope(attack_slope);
+                    granular.set_grain_sustain_duration(sustain_duration);
+                    granular.set_grain_release_slope(release_slope);
+                }
             }
         };
     }
 
-    pub fn send_state(&mut self){
+    pub fn send_state(&mut self) {
         self.state_count -= 1;
         if self.state_count == 0 {
             self.state_count = STATE_COUNT;
             let granular = self.granular_osc.try_borrow_mut().unwrap();
             let _ = self.state_sender.send(SynthState {
-                index: granular.current_index()
+                index: granular.current_index(),
             });
         }
     }

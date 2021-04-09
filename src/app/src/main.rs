@@ -1,15 +1,17 @@
+use audio::{player::Player, synthengine::StereoGeneratorFactory};
+use dsp::core::OscReceiver;
+use granular::{
+    create_gui_event_sender_receiver, create_synth_event_sender_receiver,
+    synth_to_ctrl_state_synchro, GranularController, GranularOscMessageHandler,
+    GranularOscMessageSender, GranularSynth, SynthEventReceiver, SynthEventSender, SynthState,
+};
+use ring_channel::{ring_channel, RingReceiver, RingSender};
 use std::io::prelude::*;
+use std::num::NonZeroUsize;
 use std::{
     io,
     sync::{Arc, Mutex},
 };
-use std::num::NonZeroUsize;
-use ring_channel::{ring_channel,RingSender,RingReceiver};
-use std::thread;
-
-use audio::{player::Player, synthengine::StereoGeneratorFactory};
-use dsp::core::OscReceiver;
-use granular::{GranularController, GranularOscMessageHandler, GranularOscMessageSender, GranularSynth, SynthEventReceiver, SynthEventSender, SynthState, create_gui_event_sender_receiver, create_synth_event_sender_receiver, synth_to_ctrl_state_synchro};
 
 //===================================
 // Synth factory
@@ -18,18 +20,18 @@ struct SoundGeneratorFactory {
     event_sender: SynthEventSender,
     event_receiver: SynthEventReceiver,
     state_sender: RingSender<SynthState>,
-    state_receiver: RingReceiver<SynthState>
+    state_receiver: RingReceiver<SynthState>,
 }
 impl SoundGeneratorFactory {
     pub fn new() -> Self {
         let (event_sender, event_receiver) = create_synth_event_sender_receiver();
-        let (state_sender ,state_receiver) = ring_channel(NonZeroUsize::new(100).unwrap());
+        let (state_sender, state_receiver) = ring_channel(NonZeroUsize::new(100).unwrap());
 
         SoundGeneratorFactory {
             event_sender,
             event_receiver,
             state_sender,
-            state_receiver
+            state_receiver,
         }
     }
 }
@@ -46,17 +48,20 @@ pub struct OscSender {}
 fn main() {
     // Sound generator
     let (gui_send, gui_recv) = create_gui_event_sender_receiver();
-   
+
     let sound_generator_factory = SoundGeneratorFactory::new();
     let control_channel = sound_generator_factory.event_sender.clone();
-    let mut synth_state_receiver = sound_generator_factory.state_receiver.clone();
-    
+    let synth_state_receiver = sound_generator_factory.state_receiver.clone();
+
     let mut player = Player::new(sound_generator_factory, None);
 
     let sample_rate = player.start().unwrap();
 
-    let mut granular_osc_sender =
-        GranularOscMessageSender::new("127.0.0.1:9664".to_owned(),"127.0.0.1:9665".to_owned(), &gui_recv);
+    let mut granular_osc_sender = GranularOscMessageSender::new(
+        "127.0.0.1:9664".to_owned(),
+        "127.0.0.1:9665".to_owned(),
+        &gui_recv,
+    );
     let mut synth_controller =
         GranularController::new(control_channel, Some(gui_send), sample_rate);
     let _ = synth_controller
@@ -70,7 +75,7 @@ fn main() {
     granular_osc_sender.start().unwrap();
     osc_receiver.start().unwrap();
 
-    synth_to_ctrl_state_synchro(synth_state_receiver,wrapped_synth_controller.clone());
+    synth_to_ctrl_state_synchro(synth_state_receiver, wrapped_synth_controller.clone());
 
     pause();
 }

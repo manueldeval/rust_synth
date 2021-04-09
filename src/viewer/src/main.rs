@@ -156,6 +156,4 @@
 //     draw.to_frame(app, &frame).unwrap();
 //     model.ui.draw_to_frame(app, &frame).unwrap();
 // }
-fn main(){
-    
-}
+fn main() {}
