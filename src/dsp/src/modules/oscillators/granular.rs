@@ -21,6 +21,7 @@ pub struct Granulator {
     grain_attack_slope: f32,
     grain_sustain_duration: f32,
     grain_release_slope: f32,
+    vec_result: Vec<GrainResult>,
 }
 
 impl Granulator {
@@ -44,6 +45,8 @@ impl Granulator {
         let grain_attack_slope = 0.1;
         let grain_sustain_duration = 1_000.0;
         let grain_release_slope= -0.1;
+
+        let vec_result  = Vec::with_capacity(MAX_GRAINS);
         Self {
             index,
             step,
@@ -61,6 +64,7 @@ impl Granulator {
             grain_attack_slope,
             grain_sustain_duration,
             grain_release_slope,
+            vec_result,
         }
     }
 
@@ -129,16 +133,16 @@ impl Granulator {
     }
 
     #[inline] 
-    fn get_value_at(&self,position: i32) -> f32 {
-        self.samples[position as usize]
+    fn get_value_at(&self,position: usize) -> f32 {
+        self.samples[position]
     }
 
     #[inline] 
     fn get_interpolated_value_at(&self,position: f32) -> f32 {
-        let idx = position as i32;
+        let idx = position as usize;
         let w = position.fract();
-        let v0 = self.get_value_at(idx);
-        let v1 = self.get_value_at(idx + 1); 
+        let v0 = self.samples[idx];
+        let v1 = self.samples[idx + 1]; 
         (1.0 - w) * v0 + w * v1
     }
 }
@@ -157,14 +161,6 @@ impl Module for Granulator {
         let sustain_duration = self.grain_sustain_duration;
         let release_slope = self.grain_release_slope;
 
-        // self.grains.grain_scheduler(grain_step*buf_left.len() as f32,
-        //     self.index, 
-        //     self.pan_spread, 
-        //     self.scan_spread * (self.samples.len() as f32/2.0), 
-        //     attack_slope, 
-        //     sustain_duration,
-        //     release_slope);
-        let mut vec_result: Vec<GrainResult> = Vec::with_capacity(MAX_GRAINS);
         for (b_l,b_r) in buf_left.iter_mut().zip(buf_right) {
             self.grains.grain_scheduler(grain_step,
                 self.index, 
@@ -178,38 +174,31 @@ impl Module for Granulator {
             let mut r_value = 0.0;
             let mut left = 0.0;
             let mut right = 0.0;            
-            
-            // let results: Vec<GrainResult> = self.grains.grains
-            //     .iter_mut()
-            //     .map(|g| g.next(grain_step,start,end))
-            //     .filter_map(|g| g)
-            //     .collect();
-            
-            // results.iter().for_each(|r| {
-            //         l_value += r.l_value;
-            //         r_value += r.r_value;
-            //         let sample_value = self.get_interpolated_value_at(r.position);
-            //         left += r.l_value * sample_value;
-            //         right += r.r_value * sample_value;
-            // });
+            {
+                let result = &mut self.vec_result;
+                result.clear();
+                for g in self.grains.grains.iter_mut() {
+                    let optional_result = g.next(grain_step,start,end);
+                    if let Some(res) = optional_result {
+                        result.push(res);
+                    }
+                }
 
-            vec_result.clear();
-
-            self.grains.grains
-                .iter_mut()
-                .map(|g| g.next(grain_step,start,end))
-                .filter_map(|g| g)
-                .for_each(|src|{
-                    vec_result.push(src);
-                });
-            
-            vec_result.iter().for_each(|r| {
-                    l_value += r.l_value;
-                    r_value += r.r_value;
-                    let sample_value = self.get_interpolated_value_at(r.position);
-                    left += r.l_value * sample_value;
-                    right += r.r_value * sample_value;
-            });
+                // self.grains.grains
+                //     .iter_mut()
+                //     .map(|g| g.next(grain_step,start,end))
+                //     .filter_map(|g| g)
+                //     .for_each(|src|{
+                //         result.push(src);
+                //     });
+            }
+            for r in self.vec_result.iter() {
+                l_value += r.l_value;
+                r_value += r.r_value;
+                let sample_value = self.get_interpolated_value_at(r.position);
+                left += r.l_value * sample_value;
+                right += r.r_value * sample_value;
+            }
 
             if l_value > 1.0 {
                 left = left/l_value;

@@ -136,14 +136,16 @@ pub struct Grains {
     // Orchestration
     time_beetween_grains: f32,
     current_time: f32,
-    pub grains: [Grain;MAX_GRAINS],
+    pub grains: Vec<Grain>,
 }
 
 impl Grains {
     pub fn new(time_beetween_grains: f32) -> Self {
         let current_time = 0.0;
-        let grains = Default::default();
-        
+        let mut grains = Vec::with_capacity(MAX_GRAINS);
+        for _ in 0..MAX_GRAINS {
+            grains.push(Grain::default());
+        }
         Self {
             time_beetween_grains,
             current_time,

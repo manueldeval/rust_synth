@@ -11,3 +11,4 @@ Slope: (x)^(2^slope)
 \ 2^{\frac{1}{n}\log\left(x\right)}
 
 https://github.com/flamegraph-rs/flamegraph
+cargo flamegraph --bin=demoapp
